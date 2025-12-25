@@ -7,20 +7,24 @@ import TVMiniChart from "./components/TVMiniChart";
 import { NetWorthLine, BucketArea, IndexLikeLine } from "./components/Charts";
 import { PieBreakdown, PromptBox, computeLatestBreakdowns } from "./components/InsightsExtras";
 
-const SCHEMA_VERSION = 1;
+import type { AppState, AutoFxState, MonthRecord, Subject, MonthlyEntry, Currency } from "./types";
 
-function ymNow() {
+const SCHEMA_VERSION = 1 as const;
+
+type TabKey = "overview" | "monthly" | "settings";
+
+function ymNow(): string {
   const d = new Date();
   const y = d.getFullYear();
   const m = String(d.getMonth() + 1).padStart(2, "0");
   return `${y}-${m}`;
 }
 
-function genId(prefix = "sub") {
+function genId(prefix = "sub"): string {
   return `${prefix}_${Math.random().toString(16).slice(2)}_${Date.now().toString(16)}`;
 }
 
-function removeSubjectFromState(prev, subjectId) {
+function removeSubjectFromState(prev: AppState, subjectId: string): AppState {
   const nextSubjects = prev.subjects.filter((s) => s.id !== subjectId);
   const nextMonths = prev.months.map((m) => ({
     ...m,
@@ -29,7 +33,7 @@ function removeSubjectFromState(prev, subjectId) {
   return { ...prev, subjects: nextSubjects, months: nextMonths };
 }
 
-function upsertSubject(prev, subject) {
+function upsertSubject(prev: AppState, subject: Subject): AppState {
   const exists = prev.subjects.some((s) => s.id === subject.id);
   return {
     ...prev,
@@ -37,23 +41,21 @@ function upsertSubject(prev, subject) {
   };
 }
 
-function ensureEntryInMonth(record, subject) {
+function ensureEntryInMonth(record: MonthRecord, subject: Subject): MonthRecord {
   if (record.entries.some((e) => e.subjectId === subject.id)) return record;
+  const entry: MonthlyEntry = {
+    subjectId: subject.id,
+    currency: subject.defaultCurrency ?? "CNY",
+    formula: "",
+    amount: 0
+  };
   return {
     ...record,
-    entries: [
-      ...record.entries,
-      {
-        subjectId: subject.id,
-        currency: subject.defaultCurrency ?? "CNY",
-        formula: "",
-        amount: 0
-      }
-    ]
+    entries: [...record.entries, entry]
   };
 }
 
-function prevMonthYm(ym) {
+function prevMonthYm(ym: string): string | null {
   const [yStr, mStr] = ym.split("-");
   const y = Number(yStr);
   const m = Number(mStr);
@@ -67,85 +69,91 @@ function prevMonthYm(ym) {
   return `${yy}-${mm}`;
 }
 
-function prevYearSameMonth(ym) {
+function prevYearSameMonth(ym: string): string | null {
   const [y, m] = ym.split("-");
   const yy = Number(y);
   if (!Number.isFinite(yy) || !m) return null;
   return `${yy - 1}-${m}`;
 }
 
-function pctChange(cur, prev) {
+function pctChange(cur: number, prev: number): number | null {
   if (!Number.isFinite(cur) || !Number.isFinite(prev) || prev === 0) return null;
   return ((cur - prev) / prev) * 100;
 }
 
-function isRecord(v) {
+function isRecord(v: unknown): v is Record<string, unknown> {
   return !!v && typeof v === "object" && !Array.isArray(v);
 }
 
-function isCurrency(v) {
+function isCurrency(v: unknown): v is Currency {
   return v === "CNY" || v === "USD";
 }
 
-function isBucket(v) {
+function isBucket(v: unknown): v is Subject["bucket"] {
   return v === "Cash" || v === "Invest" || v === "Social" || v === "Other";
 }
 
-function isYYYYMM(v) {
+function isYYYYMM(v: unknown): v is string {
   if (typeof v !== "string") return false;
   return /^\d{4}-(0[1-9]|1[0-2])$/.test(v);
 }
 
-function validateSubject(s) {
+function validateSubject(s: unknown): s is Subject {
+  if (!isRecord(s)) return false;
+  const r = s as Record<string, unknown>;
   return (
-    isRecord(s) &&
-    typeof s.id === "string" &&
-    typeof s.name === "string" &&
-    isBucket(s.bucket) &&
-    isCurrency(s.defaultCurrency) &&
-    (s.isIndexLike === undefined || typeof s.isIndexLike === "boolean") &&
-    (s.includeInNetWorth === undefined || typeof s.includeInNetWorth === "boolean")
+    typeof r.id === "string" &&
+    typeof r.name === "string" &&
+    isBucket(r.bucket) &&
+    isCurrency(r.defaultCurrency) &&
+    (r.isIndexLike === undefined || typeof r.isIndexLike === "boolean") &&
+    (r.includeInNetWorth === undefined || typeof r.includeInNetWorth === "boolean")
   );
 }
 
-function validateMonthlyEntry(e) {
+function validateMonthlyEntry(e: unknown): e is MonthlyEntry {
+  if (!isRecord(e)) return false;
+  const r = e as Record<string, unknown>;
   return (
-    isRecord(e) &&
-    typeof e.subjectId === "string" &&
-    isCurrency(e.currency) &&
-    typeof e.formula === "string" &&
-    typeof e.amount === "number" &&
-    Number.isFinite(e.amount)
+    typeof r.subjectId === "string" &&
+    isCurrency(r.currency) &&
+    typeof r.formula === "string" &&
+    typeof r.amount === "number" &&
+    Number.isFinite(r.amount)
   );
 }
 
-function validateMonthRecord(m) {
+function validateMonthRecord(m: unknown): m is MonthRecord {
+  if (!isRecord(m)) return false;
+  const r = m as Record<string, unknown>;
+  const entries = r.entries;
   return (
-    isRecord(m) &&
-    isYYYYMM(m.month) &&
-    Array.isArray(m.entries) &&
-    m.entries.every(validateMonthlyEntry) &&
-    (m.note === undefined || typeof m.note === "string")
+    isYYYYMM(r.month) &&
+    Array.isArray(entries) &&
+    entries.every(validateMonthlyEntry) &&
+    (r.note === undefined || typeof r.note === "string")
   );
 }
 
-function validateAppStateLike(v) {
-  return (
-    isRecord(v) &&
-    Array.isArray(v.subjects) &&
-    v.subjects.every(validateSubject) &&
-    Array.isArray(v.months) &&
-    v.months.every(validateMonthRecord) &&
-    isRecord(v.settings) &&
-    typeof v.settings.usdcnhManual === "number" &&
-    Number.isFinite(v.settings.usdcnhManual) &&
-    typeof v.settings.enableCorsProxyAutoFx === "boolean"
-  );
+function validateAppStateLike(v: unknown): v is AppState {
+  if (!isRecord(v)) return false;
+  const r = v as Record<string, unknown>;
+
+  const subjects = r.subjects;
+  const months = r.months;
+  const settings = r.settings;
+
+  if (!Array.isArray(subjects) || !subjects.every(validateSubject)) return false;
+  if (!Array.isArray(months) || !months.every(validateMonthRecord)) return false;
+  if (!isRecord(settings)) return false;
+
+  const s = settings as Record<string, unknown>;
+  return typeof s.usdcnhManual === "number" && Number.isFinite(s.usdcnhManual) && typeof s.enableCorsProxyAutoFx === "boolean";
 }
 
-function formatNow(ts) {
+function formatNow(ts: number): string {
   const d = new Date(ts);
-  const pad = (n) => String(n).padStart(2, "0");
+  const pad = (n: number) => String(n).padStart(2, "0");
   const y = d.getFullYear();
   const m = pad(d.getMonth() + 1);
   const day = pad(d.getDate());
@@ -156,11 +164,11 @@ function formatNow(ts) {
 }
 
 export default function App() {
-  const [state, setState] = useState(() => loadState());
-  const [tab, setTab] = useState("overview");
-  const [ym, setYm] = useState(() => state.months[state.months.length - 1]?.month || ymNow());
-  const [autoFx, setAutoFx] = useState({ status: "idle" });
-  const [nowTs, setNowTs] = useState(() => Date.now());
+  const [state, setState] = useState<AppState>(() => loadState() as AppState);
+  const [tab, setTab] = useState<TabKey>("overview");
+  const [ym, setYm] = useState<string>(() => state.months[state.months.length - 1]?.month || ymNow());
+  const [autoFx, setAutoFx] = useState<AutoFxState>({ status: "idle" });
+  const [nowTs, setNowTs] = useState<number>(() => Date.now());
 
   useEffect(() => {
     saveState(state);
@@ -194,11 +202,11 @@ export default function App() {
     };
   }, [state.settings.enableCorsProxyAutoFx]);
 
-  const workingFx = useMemo(() => {
+  const workingFx = useMemo<number>(() => {
     return autoFx.status === "ok" && autoFx.usdcnh ? autoFx.usdcnh : state.settings.usdcnhManual;
   }, [autoFx.status, autoFx.usdcnh, state.settings.usdcnhManual]);
 
-  const record = useMemo(() => ensureMonth(state, ym), [state, ym]);
+  const record = useMemo<MonthRecord>(() => ensureMonth(state, ym), [state, ym]);
   const nw = useMemo(() => monthNetWorth(state, record, workingFx), [state, record, workingFx]);
   const series = useMemo(() => netWorthSeries(state, workingFx), [state, workingFx]);
 
@@ -209,16 +217,13 @@ export default function App() {
     [state, latest, workingFx]
   );
 
-  const updateMonth = useCallback(
-    (next) => {
-      setState((prev) => upsertMonth(prev, next));
-    },
-    [setState]
-  );
+  const updateMonth = useCallback((next: MonthRecord) => {
+    setState((prev) => upsertMonth(prev, next));
+  }, []);
 
   const updateEntry = useCallback(
-    (idx, patch) => {
-      const next = { ...record, entries: [...record.entries] };
+    (idx: number, patch: Partial<MonthlyEntry>) => {
+      const next: MonthRecord = { ...record, entries: [...record.entries] };
       next.entries[idx] = { ...next.entries[idx], ...patch };
       updateMonth(next);
     },
@@ -226,7 +231,7 @@ export default function App() {
   );
 
   const addEntryBySubjectId = useCallback(
-    (subjectId) => {
+    (subjectId: string) => {
       const subj = state.subjects.find((s) => s.id === subjectId);
       if (!subj) return;
       updateMonth(ensureEntryInMonth(record, subj));
@@ -235,7 +240,8 @@ export default function App() {
   );
 
   const headerFxBadge = useMemo(() => {
-    if (autoFx.status === "ok" && autoFx.usdcnh) return <span className="badge">USDCNH 自动：{autoFx.usdcnh.toFixed(5)}</span>;
+    if (autoFx.status === "ok" && autoFx.usdcnh)
+      return <span className="badge">USDCNH 自动：{autoFx.usdcnh.toFixed(5)}</span>;
     if (autoFx.status === "error") return <span className="badge">USDCNH 自动失败</span>;
     return <span className="badge">USDCNH：手动</span>;
   }, [autoFx.status, autoFx.usdcnh]);
@@ -261,20 +267,25 @@ export default function App() {
     return {
       prevYm,
       yoyYm,
-      mom: prevNw
-        ? { ok: true, deltaCny: momDeltaCny, pctCny: momPctCny, baseCny: prevNw.totalCny }
-        : { ok: false },
-      yoy: yoyNw
-        ? { ok: true, deltaCny: yoyDeltaCny, pctCny: yoyPctCny, baseCny: yoyNw.totalCny }
-        : { ok: false }
+      mom: prevNw ? { ok: true as const, deltaCny: momDeltaCny!, pctCny: momPctCny, baseCny: prevNw.totalCny } : { ok: false as const },
+      yoy: yoyNw ? { ok: true as const, deltaCny: yoyDeltaCny!, pctCny: yoyPctCny, baseCny: yoyNw.totalCny } : { ok: false as const }
     };
-  }, [record.month, state, nw.totalCny, workingFx]);
+  }, [record.month, state.months, nw.totalCny, workingFx, state]);
 
   return (
     <div className="container">
       <div className="header">
         <div className="brand">Asset Lite</div>
-        <div style={{ marginLeft: "auto", display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", justifyContent: "flex-end" }}>
+        <div
+          style={{
+            marginLeft: "auto",
+            display: "flex",
+            gap: 8,
+            alignItems: "center",
+            flexWrap: "wrap",
+            justifyContent: "flex-end"
+          }}
+        >
           <span className="badge">当前时间：{formatNow(nowTs)}</span>
           {headerFxBadge}
           <span className="badge">FX={Number.isFinite(workingFx) ? workingFx.toFixed(5) : "--"}</span>
@@ -297,13 +308,7 @@ export default function App() {
 
           <div className="row" style={{ gap: 8, alignItems: "center" }}>
             <span className="badge">月份</span>
-            <input
-              className="input"
-              style={{ width: 170 }}
-              type="month"
-              value={ym}
-              onChange={(e) => setYm(e.target.value)}
-            />
+            <input className="input" style={{ width: 170 }} type="month" value={ym} onChange={(e) => setYm(e.target.value)} />
             <button className="btn" onClick={() => updateMonth(record)}>
               保存当月
             </button>
@@ -342,9 +347,9 @@ export default function App() {
                   环比：
                   {momYoy.mom.ok
                     ? ` ${momYoy.mom.deltaCny >= 0 ? "+" : ""}${momYoy.mom.deltaCny.toFixed(2)} CNY` +
-                      (momYoy.mom.pctCny == null
-                        ? ""
-                        : `（${momYoy.mom.pctCny >= 0 ? "+" : ""}${momYoy.mom.pctCny.toFixed(1)}%）`)
+                    (momYoy.mom.pctCny == null
+                      ? ""
+                      : `（${momYoy.mom.pctCny >= 0 ? "+" : ""}${momYoy.mom.pctCny.toFixed(1)}%）`)
                     : " —"}
                 </span>
 
@@ -352,9 +357,9 @@ export default function App() {
                   同比：
                   {momYoy.yoy.ok
                     ? ` ${momYoy.yoy.deltaCny >= 0 ? "+" : ""}${momYoy.yoy.deltaCny.toFixed(2)} CNY` +
-                      (momYoy.yoy.pctCny == null
-                        ? ""
-                        : `（${momYoy.yoy.pctCny >= 0 ? "+" : ""}${momYoy.yoy.pctCny.toFixed(1)}%）`)
+                    (momYoy.yoy.pctCny == null
+                      ? ""
+                      : `（${momYoy.yoy.pctCny >= 0 ? "+" : ""}${momYoy.yoy.pctCny.toFixed(1)}%）`)
                     : " —"}
                 </span>
               </div>
@@ -367,17 +372,23 @@ export default function App() {
 
             <div className="split">
               <div className="card pad" style={{ background: "rgba(255,255,255,.04)" }}>
-                <div className="muted" style={{ fontSize: 12, fontWeight: 800, marginBottom: 8 }}>净资产趋势（CNY）</div>
+                <div className="muted" style={{ fontSize: 12, fontWeight: 800, marginBottom: 8 }}>
+                  净资产趋势（CNY）
+                </div>
                 <NetWorthLine data={series} />
               </div>
               <div className="card pad" style={{ background: "rgba(255,255,255,.04)" }}>
-                <div className="muted" style={{ fontSize: 12, fontWeight: 800, marginBottom: 8 }}>指数化占比趋势</div>
+                <div className="muted" style={{ fontSize: 12, fontWeight: 800, marginBottom: 8 }}>
+                  指数化占比趋势
+                </div>
                 <IndexLikeLine data={series} />
               </div>
             </div>
 
             <div className="card pad" style={{ background: "rgba(255,255,255,.04)", marginTop: 12 }}>
-              <div className="muted" style={{ fontSize: 12, fontWeight: 800, marginBottom: 8 }}>结构变化（按大类堆叠）</div>
+              <div className="muted" style={{ fontSize: 12, fontWeight: 800, marginBottom: 8 }}>
+                结构变化（按大类堆叠）
+              </div>
               <BucketArea data={series} />
             </div>
 
@@ -396,11 +407,15 @@ export default function App() {
 
           <div className="kpi">
             <div className="card pad" style={{ background: "rgba(255,255,255,.04)" }}>
-              <div className="muted" style={{ fontSize: 12 }}>净资产（CNY）</div>
+              <div className="muted" style={{ fontSize: 12 }}>
+                净资产（CNY）
+              </div>
               <div className="big">￥{nw.totalCny.toFixed(2)}</div>
             </div>
             <div className="card pad" style={{ background: "rgba(255,255,255,.04)" }}>
-              <div className="muted" style={{ fontSize: 12 }}>净资产（USD）</div>
+              <div className="muted" style={{ fontSize: 12 }}>
+                净资产（USD）
+              </div>
               <div className="big">${nw.totalUsd.toFixed(2)}</div>
             </div>
           </div>
@@ -446,7 +461,7 @@ export default function App() {
                       </div>
                     </td>
                     <td>
-                      <select value={e.currency} onChange={(ev) => updateEntry(idx, { currency: ev.target.value })}>
+                      <select value={e.currency} onChange={(ev) => updateEntry(idx, { currency: ev.target.value as Currency })}>
                         <option value="CNY">CNY</option>
                         <option value="USD">USD</option>
                       </select>
@@ -459,18 +474,22 @@ export default function App() {
                         placeholder="可输入公式，如 12000+3000-500"
                       />
                       {!res.ok ? (
-                        <div style={{ marginTop: 6 }} className="note">⚠ {res.error}</div>
+                        <div style={{ marginTop: 6 }} className="note">
+                          ⚠ {res.error}
+                        </div>
                       ) : (
-                        <div style={{ marginTop: 6 }} className="note">已解析</div>
+                        <div style={{ marginTop: 6 }} className="note">
+                          已解析
+                        </div>
                       )}
                     </td>
-                    <td style={{ fontFeatureSettings: '"tnum"' }}>
+                    <td style={{ fontFeatureSettings: '"tnum"' as any }}>
                       {Number.isFinite(amount) ? amount.toFixed(2) : "--"}
                     </td>
-                    <td style={{ fontFeatureSettings: '"tnum"' }}>
+                    <td style={{ fontFeatureSettings: '"tnum"' as any }}>
                       ￥{Number.isFinite(cny) ? cny.toFixed(2) : "--"}
                     </td>
-                    <td style={{ fontFeatureSettings: '"tnum"' }}>
+                    <td style={{ fontFeatureSettings: '"tnum"' as any }}>
                       ${Number.isFinite(usd) ? usd.toFixed(2) : "--"}
                     </td>
                   </tr>
@@ -488,7 +507,9 @@ export default function App() {
           </div>
 
           <div className="card pad" style={{ background: "rgba(255,255,255,.04)" }}>
-            <div className="muted" style={{ fontSize: 12, fontWeight: 800, marginBottom: 8 }}>汇率（USDCNH）</div>
+            <div className="muted" style={{ fontSize: 12, fontWeight: 800, marginBottom: 8 }}>
+              汇率（USDCNH）
+            </div>
             <div className="row wrap" style={{ gap: 10, alignItems: "center" }}>
               <span className="badge">手动</span>
               <input
@@ -498,7 +519,10 @@ export default function App() {
                 step="0.00001"
                 value={state.settings.usdcnhManual}
                 onChange={(e) =>
-                  setState((prev) => ({ ...prev, settings: { ...prev.settings, usdcnhManual: Number(e.target.value) } }))
+                  setState((prev) => ({
+                    ...prev,
+                    settings: { ...prev.settings, usdcnhManual: Number(e.target.value) }
+                  }))
                 }
                 title="手动 USDCNH（自动成功则优先用自动）"
               />
@@ -517,9 +541,7 @@ export default function App() {
               </label>
               <span className="badge">当前：{Number.isFinite(workingFx) ? workingFx.toFixed(5) : "--"}</span>
             </div>
-            {autoFx.status === "error" && (
-              <div className="note" style={{ marginTop: 8 }}>自动抓取失败：{autoFx.message}</div>
-            )}
+            {autoFx.status === "error" && <div className="note" style={{ marginTop: 8 }}>自动抓取失败：{autoFx.message}</div>}
           </div>
 
           <div className="subtleLine" />
@@ -533,17 +555,25 @@ export default function App() {
 
           <div className="subtleLine" />
 
-          <BackupPanel state={state} setState={setState} />
+          <BackupPanel state={state} setState={(s) => setState(s)} />
         </div>
       )}
     </div>
   );
 }
 
-function AddEntryRow({ state, record, onAdd }) {
-  const [pick, setPick] = useState("");
+function AddEntryRow({
+  state,
+  record,
+  onAdd
+}: {
+  state: AppState;
+  record: MonthRecord;
+  onAdd: (subjectId: string) => void;
+}) {
+  const [pick, setPick] = useState<string>("");
 
-  const candidates = useMemo(() => {
+  const candidates = useMemo<Subject[]>(() => {
     const used = new Set(record.entries.map((e) => e.subjectId));
     return state.subjects.filter((s) => !used.has(s.id));
   }, [record.entries, state.subjects]);
@@ -570,14 +600,26 @@ function AddEntryRow({ state, record, onAdd }) {
       <button className="btn" disabled={!pick} onClick={() => pick && onAdd(pick)}>
         添加到当月
       </button>
-      <span className="muted2" style={{ fontSize: 12 }}>先在「设置」里新增科目，再回这里添加条目</span>
+      <span className="muted2" style={{ fontSize: 12 }}>
+        先在「设置」里新增科目，再回这里添加条目
+      </span>
     </div>
   );
 }
 
-function SubjectsEditor({ state, setState, onDeleteSubject, onAddSubject }) {
+function SubjectsEditor({
+  state,
+  setState,
+  onDeleteSubject,
+  onAddSubject
+}: {
+  state: AppState;
+  setState: React.Dispatch<React.SetStateAction<AppState>>;
+  onDeleteSubject: (id: string) => void;
+  onAddSubject: (subject: Subject) => void;
+}) {
   const updateSubject = useCallback(
-    (id, patch) => {
+    (id: string, patch: Partial<Subject>) => {
       setState((prev) => ({
         ...prev,
         subjects: prev.subjects.map((s) => (s.id === id ? { ...s, ...patch } : s))
@@ -586,11 +628,11 @@ function SubjectsEditor({ state, setState, onDeleteSubject, onAddSubject }) {
     [setState]
   );
 
-  const [newName, setNewName] = useState("");
-  const [newBucket, setNewBucket] = useState("Cash");
-  const [newCurrency, setNewCurrency] = useState("CNY");
-  const [newIndexLike, setNewIndexLike] = useState(false);
-  const [newIncludeNW, setNewIncludeNW] = useState(true);
+  const [newName, setNewName] = useState<string>("");
+  const [newBucket, setNewBucket] = useState<Subject["bucket"]>("Cash");
+  const [newCurrency, setNewCurrency] = useState<Currency>("CNY");
+  const [newIndexLike, setNewIndexLike] = useState<boolean>(false);
+  const [newIncludeNW, setNewIncludeNW] = useState<boolean>(true);
 
   const add = useCallback(() => {
     const name = newName.trim();
@@ -614,7 +656,9 @@ function SubjectsEditor({ state, setState, onDeleteSubject, onAddSubject }) {
 
   return (
     <div className="card pad" style={{ background: "rgba(255,255,255,.04)" }}>
-      <div className="muted" style={{ fontSize: 12, fontWeight: 800, marginBottom: 8 }}>科目</div>
+      <div className="muted" style={{ fontSize: 12, fontWeight: 800, marginBottom: 8 }}>
+        科目
+      </div>
 
       <div className="row wrap" style={{ gap: 8, alignItems: "center", marginBottom: 10 }}>
         <span className="badge">新增科目</span>
@@ -625,13 +669,13 @@ function SubjectsEditor({ state, setState, onDeleteSubject, onAddSubject }) {
           onChange={(e) => setNewName(e.target.value)}
           placeholder="科目名称，例如：微信、支付宝、微众银行、应收账款…"
         />
-        <select value={newBucket} onChange={(e) => setNewBucket(e.target.value)}>
+        <select value={newBucket} onChange={(e) => setNewBucket(e.target.value as Subject["bucket"])}>
           <option value="Cash">Cash</option>
           <option value="Invest">Invest</option>
           <option value="Social">Social</option>
           <option value="Other">Other</option>
         </select>
-        <select value={newCurrency} onChange={(e) => setNewCurrency(e.target.value)}>
+        <select value={newCurrency} onChange={(e) => setNewCurrency(e.target.value as Currency)}>
           <option value="CNY">CNY</option>
           <option value="USD">USD</option>
         </select>
@@ -659,15 +703,20 @@ function SubjectsEditor({ state, setState, onDeleteSubject, onAddSubject }) {
               alignItems: "center"
             }}
           >
-            <div className="badge" title={s.id}>{s.id}</div>
+            <div className="badge" title={s.id}>
+              {s.id}
+            </div>
             <input className="input" value={s.name} onChange={(e) => updateSubject(s.id, { name: e.target.value })} />
-            <select value={s.bucket} onChange={(e) => updateSubject(s.id, { bucket: e.target.value })}>
+            <select value={s.bucket} onChange={(e) => updateSubject(s.id, { bucket: e.target.value as Subject["bucket"] })}>
               <option value="Cash">Cash</option>
               <option value="Invest">Invest</option>
               <option value="Social">Social</option>
               <option value="Other">Other</option>
             </select>
-            <select value={s.defaultCurrency} onChange={(e) => updateSubject(s.id, { defaultCurrency: e.target.value })}>
+            <select
+              value={s.defaultCurrency}
+              onChange={(e) => updateSubject(s.id, { defaultCurrency: e.target.value as Currency })}
+            >
               <option value="CNY">CNY</option>
               <option value="USD">USD</option>
             </select>
@@ -706,8 +755,14 @@ function SubjectsEditor({ state, setState, onDeleteSubject, onAddSubject }) {
   );
 }
 
-function BackupPanel({ state, setState }) {
-  const [json, setJson] = useState("");
+function BackupPanel({
+  state,
+  setState
+}: {
+  state: AppState;
+  setState: (s: AppState) => void;
+}) {
+  const [json, setJson] = useState<string>("");
 
   const exportToTextarea = useCallback(() => {
     setJson(JSON.stringify({ schemaVersion: SCHEMA_VERSION, state }, null, 2));
@@ -731,10 +786,12 @@ function BackupPanel({ state, setState }) {
 
   const importJson = useCallback(() => {
     try {
-      const raw = JSON.parse(json);
+      const raw: unknown = JSON.parse(json);
 
-      const candidate =
-        isRecord(raw) && typeof raw.schemaVersion === "number" && raw.state !== undefined ? raw.state : raw;
+      const candidate: unknown =
+        isRecord(raw) && typeof raw.schemaVersion === "number" && (raw as any).state !== undefined
+          ? (raw as any).state
+          : raw;
 
       if (!validateAppStateLike(candidate)) {
         alert("导入失败：JSON 结构不符合 AppState（subjects/months/settings）");
@@ -751,11 +808,19 @@ function BackupPanel({ state, setState }) {
   return (
     <div className="card pad" style={{ background: "rgba(255,255,255,.04)" }}>
       <div className="row wrap" style={{ justifyContent: "space-between" }}>
-        <div className="muted" style={{ fontSize: 12, fontWeight: 800 }}>备份</div>
+        <div className="muted" style={{ fontSize: 12, fontWeight: 800 }}>
+          备份
+        </div>
         <div className="row" style={{ gap: 8 }}>
-          <button className="btn" onClick={exportToTextarea}>导出</button>
-          <button className="btn" onClick={downloadJson}>下载</button>
-          <button className="btn" onClick={importJson}>导入</button>
+          <button className="btn" onClick={exportToTextarea}>
+            导出
+          </button>
+          <button className="btn" onClick={downloadJson}>
+            下载
+          </button>
+          <button className="btn" onClick={importJson}>
+            导入
+          </button>
         </div>
       </div>
 
