@@ -102,7 +102,7 @@ export function PromptBox({
   const [text, setText] = useState("");
 
   const buildAndMaybeCopy = async () => {
-    const t = buildAssetPrompt({ state, record, fx });
+    const t = buildAssetPrompt({ state, record, fx, background: state.settings.backgroundPrompt });
     setText(t);
     try {
       await navigator.clipboard.writeText(t);
