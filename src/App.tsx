@@ -3,28 +3,22 @@ import { loadState, saveState } from "./lib/storage";
 import { ensureMonth, monthNetWorth, netWorthSeries, upsertMonth } from "./lib/calc";
 import { evalFormula } from "./lib/formula";
 import { fetchUSDCNHViaCorsProxy } from "./lib/autoFx";
-import TVMiniChart from "./components/TVMiniChart";
-import { NetWorthLine, BucketArea, IndexLikeLine } from "./components/Charts";
-import { PieBreakdown, PromptBox, computeLatestBreakdowns } from "./components/InsightsExtras";
 
-import type { AppState, AutoFxState, MonthRecord, Subject, MonthlyEntry, Currency } from "./types";
+import { ymNow, prevMonthYm, prevYearSameMonth, pctChange, formatNow } from "./lib/calc";
 
-const SCHEMA_VERSION = 1 as const;
+import MarketPanel from "./components/MarketPanel";
+import AddEntryRow from "./components/AddEntryRow";
+import SubjectsEditor from "./components/SubjectsEditor";
+import BackupPanel from "./components/BackupPanel";
+
+import { PieBreakdown, NetWorthLine, BucketArea, IndexLikeLine, computeLatestBreakdowns } from "./components/Charts";
+import { PromptBox } from "./components/InsightsExtras";
+
+import type { AppState, AutoFxState, MonthRecord, MonthlyEntry, Currency, Subject } from "./types";
 
 type TabKey = "overview" | "monthly" | "settings";
 
-function ymNow(): string {
-  const d = new Date();
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  return `${y}-${m}`;
-}
-
-function genId(prefix = "sub"): string {
-  return `${prefix}_${Math.random().toString(16).slice(2)}_${Date.now().toString(16)}`;
-}
-
-function removeSubjectFromState(prev: AppState, subjectId: string): AppState {
+export function removeSubjectFromState(prev: AppState, subjectId: string): AppState {
   const nextSubjects = prev.subjects.filter((s) => s.id !== subjectId);
   const nextMonths = prev.months.map((m) => ({
     ...m,
@@ -33,7 +27,7 @@ function removeSubjectFromState(prev: AppState, subjectId: string): AppState {
   return { ...prev, subjects: nextSubjects, months: nextMonths };
 }
 
-function upsertSubject(prev: AppState, subject: Subject): AppState {
+export function upsertSubject(prev: AppState, subject: Subject): AppState {
   const exists = prev.subjects.some((s) => s.id === subject.id);
   return {
     ...prev,
@@ -41,126 +35,20 @@ function upsertSubject(prev: AppState, subject: Subject): AppState {
   };
 }
 
-function ensureEntryInMonth(record: MonthRecord, subject: Subject): MonthRecord {
+export function ensureEntryInMonth(record: MonthRecord, subject: Subject): MonthRecord {
   if (record.entries.some((e) => e.subjectId === subject.id)) return record;
+
   const entry: MonthlyEntry = {
     subjectId: subject.id,
     currency: subject.defaultCurrency ?? "CNY",
     formula: "",
     amount: 0
   };
+
   return {
     ...record,
     entries: [...record.entries, entry]
   };
-}
-
-function prevMonthYm(ym: string): string | null {
-  const [yStr, mStr] = ym.split("-");
-  const y = Number(yStr);
-  const m = Number(mStr);
-  if (!Number.isFinite(y) || !Number.isFinite(m)) return null;
-
-  const d = new Date(y, m - 1, 1);
-  d.setMonth(d.getMonth() - 1);
-
-  const yy = d.getFullYear();
-  const mm = String(d.getMonth() + 1).padStart(2, "0");
-  return `${yy}-${mm}`;
-}
-
-function prevYearSameMonth(ym: string): string | null {
-  const [y, m] = ym.split("-");
-  const yy = Number(y);
-  if (!Number.isFinite(yy) || !m) return null;
-  return `${yy - 1}-${m}`;
-}
-
-function pctChange(cur: number, prev: number): number | null {
-  if (!Number.isFinite(cur) || !Number.isFinite(prev) || prev === 0) return null;
-  return ((cur - prev) / prev) * 100;
-}
-
-function isRecord(v: unknown): v is Record<string, unknown> {
-  return !!v && typeof v === "object" && !Array.isArray(v);
-}
-
-function isCurrency(v: unknown): v is Currency {
-  return v === "CNY" || v === "USD";
-}
-
-function isBucket(v: unknown): v is Subject["bucket"] {
-  return v === "Cash" || v === "Invest" || v === "Social" || v === "Other";
-}
-
-function isYYYYMM(v: unknown): v is string {
-  if (typeof v !== "string") return false;
-  return /^\d{4}-(0[1-9]|1[0-2])$/.test(v);
-}
-
-function validateSubject(s: unknown): s is Subject {
-  if (!isRecord(s)) return false;
-  const r = s as Record<string, unknown>;
-  return (
-    typeof r.id === "string" &&
-    typeof r.name === "string" &&
-    isBucket(r.bucket) &&
-    isCurrency(r.defaultCurrency) &&
-    (r.isIndexLike === undefined || typeof r.isIndexLike === "boolean") &&
-    (r.includeInNetWorth === undefined || typeof r.includeInNetWorth === "boolean")
-  );
-}
-
-function validateMonthlyEntry(e: unknown): e is MonthlyEntry {
-  if (!isRecord(e)) return false;
-  const r = e as Record<string, unknown>;
-  return (
-    typeof r.subjectId === "string" &&
-    isCurrency(r.currency) &&
-    typeof r.formula === "string" &&
-    typeof r.amount === "number" &&
-    Number.isFinite(r.amount)
-  );
-}
-
-function validateMonthRecord(m: unknown): m is MonthRecord {
-  if (!isRecord(m)) return false;
-  const r = m as Record<string, unknown>;
-  const entries = r.entries;
-  return (
-    isYYYYMM(r.month) &&
-    Array.isArray(entries) &&
-    entries.every(validateMonthlyEntry) &&
-    (r.note === undefined || typeof r.note === "string")
-  );
-}
-
-function validateAppStateLike(v: unknown): v is AppState {
-  if (!isRecord(v)) return false;
-  const r = v as Record<string, unknown>;
-
-  const subjects = r.subjects;
-  const months = r.months;
-  const settings = r.settings;
-
-  if (!Array.isArray(subjects) || !subjects.every(validateSubject)) return false;
-  if (!Array.isArray(months) || !months.every(validateMonthRecord)) return false;
-  if (!isRecord(settings)) return false;
-
-  const s = settings as Record<string, unknown>;
-  return typeof s.usdcnhManual === "number" && Number.isFinite(s.usdcnhManual) && typeof s.enableCorsProxyAutoFx === "boolean";
-}
-
-function formatNow(ts: number): string {
-  const d = new Date(ts);
-  const pad = (n: number) => String(n).padStart(2, "0");
-  const y = d.getFullYear();
-  const m = pad(d.getMonth() + 1);
-  const day = pad(d.getDate());
-  const hh = pad(d.getHours());
-  const mm = pad(d.getMinutes());
-  const ss = pad(d.getSeconds());
-  return `${y}-${m}-${day} ${hh}:${mm}:${ss}`;
 }
 
 export default function App() {
@@ -267,8 +155,12 @@ export default function App() {
     return {
       prevYm,
       yoyYm,
-      mom: prevNw ? { ok: true as const, deltaCny: momDeltaCny!, pctCny: momPctCny, baseCny: prevNw.totalCny } : { ok: false as const },
-      yoy: yoyNw ? { ok: true as const, deltaCny: yoyDeltaCny!, pctCny: yoyPctCny, baseCny: yoyNw.totalCny } : { ok: false as const }
+      mom: prevNw
+        ? { ok: true as const, deltaCny: momDeltaCny!, pctCny: momPctCny, baseCny: prevNw.totalCny }
+        : { ok: false as const },
+      yoy: yoyNw
+        ? { ok: true as const, deltaCny: yoyDeltaCny!, pctCny: yoyPctCny, baseCny: yoyNw.totalCny }
+        : { ok: false as const }
     };
   }, [record.month, state.months, nw.totalCny, workingFx, state]);
 
@@ -309,32 +201,13 @@ export default function App() {
           <div className="row" style={{ gap: 8, alignItems: "center" }}>
             <span className="badge">月份</span>
             <input className="input" style={{ width: 170 }} type="month" value={ym} onChange={(e) => setYm(e.target.value)} />
-            <button className="btn" onClick={() => updateMonth(record)}>
-              保存当月
-            </button>
           </div>
         </div>
       </div>
 
       {tab === "overview" && (
         <>
-          <div className="card pad" style={{ marginTop: 12 }}>
-            <div className="sectionTitle">
-              <div className="h2">实时行情</div>
-            </div>
-
-            <div className="grid" style={{ gridTemplateColumns: "repeat(3, 1fr)" }}>
-              <div className="card pad" style={{ background: "rgba(255,255,255,.05)" }}>
-                <TVMiniChart symbol="NASDAQ:QQQ" title="QQQ" />
-              </div>
-              <div className="card pad" style={{ background: "rgba(255,255,255,.05)" }}>
-                <TVMiniChart symbol="BINANCE:BTCUSDT" title="BTC" />
-              </div>
-              <div className="card pad" style={{ background: "rgba(255,255,255,.05)" }}>
-                <TVMiniChart symbol="FX:USDCNH" title="USDCNH" />
-              </div>
-            </div>
-          </div>
+          <MarketPanel />
 
           <div className="card pad" style={{ marginTop: 12 }}>
             <div className="sectionTitle">
@@ -347,9 +220,9 @@ export default function App() {
                   环比：
                   {momYoy.mom.ok
                     ? ` ${momYoy.mom.deltaCny >= 0 ? "+" : ""}${momYoy.mom.deltaCny.toFixed(2)} CNY` +
-                    (momYoy.mom.pctCny == null
-                      ? ""
-                      : `（${momYoy.mom.pctCny >= 0 ? "+" : ""}${momYoy.mom.pctCny.toFixed(1)}%）`)
+                      (momYoy.mom.pctCny == null
+                        ? ""
+                        : `（${momYoy.mom.pctCny >= 0 ? "+" : ""}${momYoy.mom.pctCny.toFixed(1)}%）`)
                     : " —"}
                 </span>
 
@@ -357,9 +230,9 @@ export default function App() {
                   同比：
                   {momYoy.yoy.ok
                     ? ` ${momYoy.yoy.deltaCny >= 0 ? "+" : ""}${momYoy.yoy.deltaCny.toFixed(2)} CNY` +
-                    (momYoy.yoy.pctCny == null
-                      ? ""
-                      : `（${momYoy.yoy.pctCny >= 0 ? "+" : ""}${momYoy.yoy.pctCny.toFixed(1)}%）`)
+                      (momYoy.yoy.pctCny == null
+                        ? ""
+                        : `（${momYoy.yoy.pctCny >= 0 ? "+" : ""}${momYoy.yoy.pctCny.toFixed(1)}%）`)
                     : " —"}
                 </span>
               </div>
@@ -483,15 +356,9 @@ export default function App() {
                         </div>
                       )}
                     </td>
-                    <td style={{ fontFeatureSettings: '"tnum"' as any }}>
-                      {Number.isFinite(amount) ? amount.toFixed(2) : "--"}
-                    </td>
-                    <td style={{ fontFeatureSettings: '"tnum"' as any }}>
-                      ￥{Number.isFinite(cny) ? cny.toFixed(2) : "--"}
-                    </td>
-                    <td style={{ fontFeatureSettings: '"tnum"' as any }}>
-                      ${Number.isFinite(usd) ? usd.toFixed(2) : "--"}
-                    </td>
+                    <td style={{ fontFeatureSettings: '"tnum"' as any }}>{Number.isFinite(amount) ? amount.toFixed(2) : "--"}</td>
+                    <td style={{ fontFeatureSettings: '"tnum"' as any }}>￥{Number.isFinite(cny) ? cny.toFixed(2) : "--"}</td>
+                    <td style={{ fontFeatureSettings: '"tnum"' as any }}>${Number.isFinite(usd) ? usd.toFixed(2) : "--"}</td>
                   </tr>
                 );
               })}
@@ -541,7 +408,34 @@ export default function App() {
               </label>
               <span className="badge">当前：{Number.isFinite(workingFx) ? workingFx.toFixed(5) : "--"}</span>
             </div>
-            {autoFx.status === "error" && <div className="note" style={{ marginTop: 8 }}>自动抓取失败：{autoFx.message}</div>}
+            {autoFx.status === "error" && (
+              <div className="note" style={{ marginTop: 8 }}>
+                自动抓取失败：{autoFx.message}
+              </div>
+            )}
+          </div>
+
+          <div className="subtleLine" />
+
+          <div className="card pad" style={{ background: "rgba(255,255,255,.04)" }}>
+            <div className="muted" style={{ fontSize: 12, fontWeight: 800, marginBottom: 8 }}>
+              个人背景（用于生成 Prompt）
+            </div>
+            <textarea
+              className="input"
+              style={{ height: 120, marginTop: 4 }}
+              placeholder="可填写：出生日期 ..., 职业 ..., 每年可结余/可投资现金流约 ... 元"
+              value={state.settings.backgroundPrompt ?? ""}
+              onChange={(e) =>
+                setState((prev) => ({
+                  ...prev,
+                  settings: { ...prev.settings, backgroundPrompt: e.target.value }
+                }))
+              }
+            />
+            <div className="note" style={{ marginTop: 8 }}>
+              这里填写的内容会被加入到生成的 Prompt 中，便于获得更贴合的建议。
+            </div>
           </div>
 
           <div className="subtleLine" />
@@ -558,283 +452,6 @@ export default function App() {
           <BackupPanel state={state} setState={(s) => setState(s)} />
         </div>
       )}
-    </div>
-  );
-}
-
-function AddEntryRow({
-  state,
-  record,
-  onAdd
-}: {
-  state: AppState;
-  record: MonthRecord;
-  onAdd: (subjectId: string) => void;
-}) {
-  const [pick, setPick] = useState<string>("");
-
-  const candidates = useMemo<Subject[]>(() => {
-    const used = new Set(record.entries.map((e) => e.subjectId));
-    return state.subjects.filter((s) => !used.has(s.id));
-  }, [record.entries, state.subjects]);
-
-  useEffect(() => {
-    if (!pick && candidates[0]?.id) setPick(candidates[0].id);
-    if (pick && !candidates.some((s) => s.id === pick)) setPick(candidates[0]?.id ?? "");
-  }, [pick, candidates, record.month]);
-
-  return (
-    <div className="row wrap" style={{ gap: 8, alignItems: "center" }}>
-      <span className="badge">新增条目</span>
-      <select value={pick} onChange={(e) => setPick(e.target.value)} disabled={candidates.length === 0}>
-        {candidates.length === 0 ? (
-          <option value="">（无可添加科目）</option>
-        ) : (
-          candidates.map((s) => (
-            <option key={s.id} value={s.id}>
-              {s.name} · {s.bucket}
-            </option>
-          ))
-        )}
-      </select>
-      <button className="btn" disabled={!pick} onClick={() => pick && onAdd(pick)}>
-        添加到当月
-      </button>
-      <span className="muted2" style={{ fontSize: 12 }}>
-        先在「设置」里新增科目，再回这里添加条目
-      </span>
-    </div>
-  );
-}
-
-function SubjectsEditor({
-  state,
-  setState,
-  onDeleteSubject,
-  onAddSubject
-}: {
-  state: AppState;
-  setState: React.Dispatch<React.SetStateAction<AppState>>;
-  onDeleteSubject: (id: string) => void;
-  onAddSubject: (subject: Subject) => void;
-}) {
-  const updateSubject = useCallback(
-    (id: string, patch: Partial<Subject>) => {
-      setState((prev) => ({
-        ...prev,
-        subjects: prev.subjects.map((s) => (s.id === id ? { ...s, ...patch } : s))
-      }));
-    },
-    [setState]
-  );
-
-  const [newName, setNewName] = useState<string>("");
-  const [newBucket, setNewBucket] = useState<Subject["bucket"]>("Cash");
-  const [newCurrency, setNewCurrency] = useState<Currency>("CNY");
-  const [newIndexLike, setNewIndexLike] = useState<boolean>(false);
-  const [newIncludeNW, setNewIncludeNW] = useState<boolean>(true);
-
-  const add = useCallback(() => {
-    const name = newName.trim();
-    if (!name) return;
-
-    onAddSubject({
-      id: genId("sub"),
-      name,
-      bucket: newBucket,
-      defaultCurrency: newCurrency,
-      isIndexLike: newIndexLike,
-      includeInNetWorth: newIncludeNW
-    });
-
-    setNewName("");
-    setNewBucket("Cash");
-    setNewCurrency("CNY");
-    setNewIndexLike(false);
-    setNewIncludeNW(true);
-  }, [newName, newBucket, newCurrency, newIndexLike, newIncludeNW, onAddSubject]);
-
-  return (
-    <div className="card pad" style={{ background: "rgba(255,255,255,.04)" }}>
-      <div className="muted" style={{ fontSize: 12, fontWeight: 800, marginBottom: 8 }}>
-        科目
-      </div>
-
-      <div className="row wrap" style={{ gap: 8, alignItems: "center", marginBottom: 10 }}>
-        <span className="badge">新增科目</span>
-        <input
-          className="input"
-          style={{ width: 260 }}
-          value={newName}
-          onChange={(e) => setNewName(e.target.value)}
-          placeholder="科目名称，例如：微信、支付宝、微众银行、应收账款…"
-        />
-        <select value={newBucket} onChange={(e) => setNewBucket(e.target.value as Subject["bucket"])}>
-          <option value="Cash">Cash</option>
-          <option value="Invest">Invest</option>
-          <option value="Social">Social</option>
-          <option value="Other">Other</option>
-        </select>
-        <select value={newCurrency} onChange={(e) => setNewCurrency(e.target.value as Currency)}>
-          <option value="CNY">CNY</option>
-          <option value="USD">USD</option>
-        </select>
-        <label className="badge" style={{ cursor: "pointer" }}>
-          <input type="checkbox" checked={newIndexLike} onChange={(e) => setNewIndexLike(e.target.checked)} />
-          指数类
-        </label>
-        <label className="badge" style={{ cursor: "pointer" }}>
-          <input type="checkbox" checked={newIncludeNW} onChange={(e) => setNewIncludeNW(e.target.checked)} />
-          计入净资产
-        </label>
-        <button className="btn primary" onClick={add} disabled={!newName.trim()}>
-          添加
-        </button>
-      </div>
-
-      <div style={{ display: "grid", gap: 8 }}>
-        {state.subjects.map((s) => (
-          <div
-            key={s.id}
-            style={{
-              display: "grid",
-              gridTemplateColumns: "160px 1fr 140px 120px 220px",
-              gap: 8,
-              alignItems: "center"
-            }}
-          >
-            <div className="badge" title={s.id}>
-              {s.id}
-            </div>
-            <input className="input" value={s.name} onChange={(e) => updateSubject(s.id, { name: e.target.value })} />
-            <select value={s.bucket} onChange={(e) => updateSubject(s.id, { bucket: e.target.value as Subject["bucket"] })}>
-              <option value="Cash">Cash</option>
-              <option value="Invest">Invest</option>
-              <option value="Social">Social</option>
-              <option value="Other">Other</option>
-            </select>
-            <select
-              value={s.defaultCurrency}
-              onChange={(e) => updateSubject(s.id, { defaultCurrency: e.target.value as Currency })}
-            >
-              <option value="CNY">CNY</option>
-              <option value="USD">USD</option>
-            </select>
-
-            <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap", justifyContent: "flex-end" }}>
-              <label className="badge" style={{ cursor: "pointer" }}>
-                <input
-                  type="checkbox"
-                  checked={!!s.isIndexLike}
-                  onChange={(e) => updateSubject(s.id, { isIndexLike: e.target.checked })}
-                />
-                指数类
-              </label>
-              <label className="badge" style={{ cursor: "pointer" }}>
-                <input
-                  type="checkbox"
-                  checked={s.includeInNetWorth !== false}
-                  onChange={(e) => updateSubject(s.id, { includeInNetWorth: e.target.checked })}
-                />
-                计入净资产
-              </label>
-              <button
-                className="btn"
-                onClick={() => {
-                  const ok = confirm(`删除科目「${s.name}」？将同时移除所有月份的对应条目。`);
-                  if (ok) onDeleteSubject(s.id);
-                }}
-              >
-                删除
-              </button>
-            </div>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-function BackupPanel({
-  state,
-  setState
-}: {
-  state: AppState;
-  setState: (s: AppState) => void;
-}) {
-  const [json, setJson] = useState<string>("");
-
-  const exportToTextarea = useCallback(() => {
-    setJson(JSON.stringify({ schemaVersion: SCHEMA_VERSION, state }, null, 2));
-  }, [state]);
-
-  const downloadJson = useCallback(() => {
-    const content = JSON.stringify({ schemaVersion: SCHEMA_VERSION, state }, null, 2);
-    const blob = new Blob([content], { type: "application/json" });
-    const url = URL.createObjectURL(blob);
-
-    const link = document.createElement("a");
-    const timestamp = new Date().toISOString().split("T")[0];
-    link.href = url;
-    link.download = `backup_${timestamp}.json`;
-    document.body.appendChild(link);
-    link.click();
-
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
-  }, [state]);
-
-  const importJson = useCallback(() => {
-    try {
-      const raw: unknown = JSON.parse(json);
-
-      const candidate: unknown =
-        isRecord(raw) && typeof raw.schemaVersion === "number" && (raw as any).state !== undefined
-          ? (raw as any).state
-          : raw;
-
-      if (!validateAppStateLike(candidate)) {
-        alert("导入失败：JSON 结构不符合 AppState（subjects/months/settings）");
-        return;
-      }
-
-      setState(candidate);
-      alert("导入成功");
-    } catch {
-      alert("JSON 解析失败");
-    }
-  }, [json, setState]);
-
-  return (
-    <div className="card pad" style={{ background: "rgba(255,255,255,.04)" }}>
-      <div className="row wrap" style={{ justifyContent: "space-between" }}>
-        <div className="muted" style={{ fontSize: 12, fontWeight: 800 }}>
-          备份
-        </div>
-        <div className="row" style={{ gap: 8 }}>
-          <button className="btn" onClick={exportToTextarea}>
-            导出
-          </button>
-          <button className="btn" onClick={downloadJson}>
-            下载
-          </button>
-          <button className="btn" onClick={importJson}>
-            导入
-          </button>
-        </div>
-      </div>
-
-      <textarea
-        className="input"
-        placeholder="点击“导出”查看内容，或在此粘贴 JSON 进行导入..."
-        style={{ height: 220, marginTop: 10 }}
-        value={json}
-        onChange={(e) => setJson(e.target.value)}
-      />
-
-      <div className="note" style={{ marginTop: 8 }}>
-        建议每月录入后下载一份 JSON 文件作为离线备份。
-      </div>
     </div>
   );
 }

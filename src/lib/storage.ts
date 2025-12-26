@@ -22,7 +22,7 @@ export function defaultState(): AppState {
     ],
     months: [],
     settings: {
-      usdcnhManual: 7.2,
+      usdcnhManual: 7,
       enableCorsProxyAutoFx: true
     }
   };

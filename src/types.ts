@@ -30,6 +30,7 @@ export type AppState = {
     usdcnhManual: number;
     // try auto update by corsproxy (optional)
     enableCorsProxyAutoFx: boolean;
+    backgroundPrompt?: string;
   };
 };
 

@@ -9,14 +9,19 @@ import {
   CartesianGrid,
   AreaChart,
   Area,
-  Legend
+  Legend,
+  PieChart,
+  Pie,
+  Cell
 } from "recharts";
+import { AppState, MonthRecord } from "../types";
+import { toCny, sumBy } from "../lib/calc";
 
 /** ---------- formatting helpers ---------- */
 const fmtInt = new Intl.NumberFormat("zh-CN", { maximumFractionDigits: 0 });
 const fmt2 = new Intl.NumberFormat("zh-CN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
-function formatCny(v: any) {
+export function formatCny(v: any) {
   const n = Number(v);
   if (!Number.isFinite(n)) return "--";
   return "￥" + fmt2.format(n);
@@ -231,4 +236,119 @@ export function BucketArea({ data }: { data: any[] }) {
       </ResponsiveContainer>
     </div>
   );
+}
+/** ---------- 4) Pie breakdown (various) ---------- */
+const PIE_COLORS = [
+  "#60A5FA", // blue
+  "#34D399", // green
+  "#FBBF24", // amber
+  "#A78BFA", // purple
+  "#F472B6", // pink
+  "#22D3EE", // cyan
+  "#FB7185", // rose
+  "#F97316"  // orange
+];
+
+export function PieBreakdown({
+  title,
+  items
+}: {
+  title: string;
+  items: { name: string; value: number }[];
+}) {
+  const data = useMemo(() => {
+    const total = items.reduce(
+      (s, x) => s + (Number.isFinite(x.value) ? x.value : 0),
+      0
+    );
+
+    return items
+      .filter((x) => Number.isFinite(x.value) && x.value > 0)
+      .sort((a, b) => b.value - a.value)
+      .map((x) => ({
+        ...x,
+        pct: total > 0 ? x.value / total : 0
+      }));
+  }, [items]);
+
+  return (
+    <div className="card pad" style={{ background: "rgba(255,255,255,.04)" }}>
+      <div
+        className="muted"
+        style={{ fontSize: 12, fontWeight: 900, marginBottom: 8 }}
+      >
+        {title}
+      </div>
+
+      <div style={{ height: 280 }}>
+        <ResponsiveContainer width="100%" height="100%">
+          <PieChart>
+            <Tooltip content={<DarkTooltip />} />
+            <Legend
+              verticalAlign="bottom"
+              height={32}
+              wrapperStyle={{
+                color: "rgba(234,240,255,.65)",
+                fontSize: 12
+              }}
+            />
+
+            <Pie
+              data={data}
+              dataKey="value"
+              nameKey="name"
+              innerRadius={62}
+              outerRadius={96}
+              paddingAngle={2}
+              stroke="rgba(255,255,255,.12)"
+              strokeWidth={1}
+              isAnimationActive={true}
+            >
+              {data.map((_, i) => (
+                <Cell
+                  key={`cell-${i}`}
+                  fill={PIE_COLORS[i % PIE_COLORS.length]}
+                />
+              ))}
+            </Pie>
+          </PieChart>
+        </ResponsiveContainer>
+      </div>
+    </div>
+  );
+}
+
+/** helpers for App to compute pie data */
+export function computeLatestBreakdowns({
+  state,
+  record,
+  fx
+}: {
+  state: AppState;
+  record: MonthRecord;
+  fx: number;
+}) {
+  const subjById = new Map(state.subjects.map((s) => [s.id, s]));
+  const included = record.entries.filter((e) => {
+    const s = subjById.get(e.subjectId);
+    return s?.includeInNetWorth !== false;
+  });
+
+  const bucketTotals: Record<string, number> = {};
+  const ccyTotals: Record<string, number> = {};
+
+  for (const e of included) {
+    const s = subjById.get(e.subjectId);
+    const amount = Number(e.amount ?? 0);
+    const currency = (e.currency ?? "CNY") as "CNY" | "USD";
+    const cny = toCny(amount, currency, fx);
+
+    sumBy(bucketTotals as any, (s?.bucket ?? "Other") as any, cny);
+    sumBy(ccyTotals as any, currency as any, cny);
+  }
+
+  const bucketItems = Object.entries(bucketTotals).map(([name, value]) => ({ name, value }));
+  const ccyItems = Object.entries(ccyTotals).map(([name, value]) => ({ name, value }));
+
+  return { bucketItems, ccyItems };
 }

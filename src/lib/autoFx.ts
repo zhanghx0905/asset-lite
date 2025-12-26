@@ -1,13 +1,7 @@
-import { AutoFxState } from "../types";
-
 /**
  * Best-effort auto FX fetch without backend.
  * Many finance endpoints block browser CORS. To keep "no backend" requirement,
  * this uses corsproxy.io as an optional relay. If it fails, user can input manually.
- *
- * corsproxy usage examples: citeturn1search4turn1search1
- * Yahoo Finance has USDCNH=X (page): citeturn1search2
- *
  * NOTE: This is intentionally "best-effort": if the proxy is down/blocked, we fall back gracefully.
  */
 export async function fetchUSDCNHViaCorsProxy(): Promise<{ ok: true; rate: number } | { ok: false; error: string }> {

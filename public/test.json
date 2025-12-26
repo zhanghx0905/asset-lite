@@ -1,0 +1,134 @@
+{
+  "schemaVersion": 1,
+  "state": {
+    "subjects": [
+      {
+        "id": "sub_cash_wechat",
+        "name": "微信余额",
+        "bucket": "Cash",
+        "defaultCurrency": "CNY",
+        "isIndexLike": false,
+        "includeInNetWorth": true
+      },
+      {
+        "id": "sub_cash_alipay",
+        "name": "支付宝余额",
+        "bucket": "Cash",
+        "defaultCurrency": "CNY",
+        "isIndexLike": false,
+        "includeInNetWorth": true
+      },
+      {
+        "id": "sub_cash_usd",
+        "name": "美元活期",
+        "bucket": "Cash",
+        "defaultCurrency": "USD",
+        "isIndexLike": false,
+        "includeInNetWorth": true
+      },
+      {
+        "id": "sub_invest_qqq",
+        "name": "美股ETF（QQQ）",
+        "bucket": "Invest",
+        "defaultCurrency": "USD",
+        "isIndexLike": true,
+        "includeInNetWorth": true
+      },
+      {
+        "id": "sub_invest_cn_index",
+        "name": "指数基金（A股）",
+        "bucket": "Invest",
+        "defaultCurrency": "CNY",
+        "isIndexLike": true,
+        "includeInNetWorth": true
+      },
+      {
+        "id": "sub_social_housing",
+        "name": "公积金",
+        "bucket": "Social",
+        "defaultCurrency": "CNY",
+        "isIndexLike": false,
+        "includeInNetWorth": true
+      },
+      {
+        "id": "sub_other_receivable",
+        "name": "应收款",
+        "bucket": "Other",
+        "defaultCurrency": "CNY",
+        "isIndexLike": false,
+        "includeInNetWorth": true
+      },
+      {
+        "id": "sub_other_ccbill",
+        "name": "信用卡账单（不计入净资产）",
+        "bucket": "Other",
+        "defaultCurrency": "CNY",
+        "isIndexLike": false,
+        "includeInNetWorth": false
+      }
+    ],
+    "months": [
+      {
+        "month": "2024-12",
+        "note": "用于同比基准（月度录入里可看到同比）",
+        "entries": [
+          { "subjectId": "sub_cash_wechat", "currency": "CNY", "formula": "8000", "amount": 8000 },
+          { "subjectId": "sub_cash_alipay", "currency": "CNY", "formula": "12000", "amount": 12000 },
+          { "subjectId": "sub_cash_usd", "currency": "USD", "formula": "1500", "amount": 1500 },
+          { "subjectId": "sub_invest_qqq", "currency": "USD", "formula": "9000", "amount": 9000 },
+          { "subjectId": "sub_invest_cn_index", "currency": "CNY", "formula": "60000", "amount": 60000 },
+          { "subjectId": "sub_social_housing", "currency": "CNY", "formula": "50000", "amount": 50000 },
+          { "subjectId": "sub_other_receivable", "currency": "CNY", "formula": "10000", "amount": 10000 },
+          { "subjectId": "sub_other_ccbill", "currency": "CNY", "formula": "2000", "amount": 2000 }
+        ]
+      },
+      {
+        "month": "2025-10",
+        "note": "用于趋势图中段",
+        "entries": [
+          { "subjectId": "sub_cash_wechat", "currency": "CNY", "formula": "9500", "amount": 9500 },
+          { "subjectId": "sub_cash_alipay", "currency": "CNY", "formula": "14000", "amount": 14000 },
+          { "subjectId": "sub_cash_usd", "currency": "USD", "formula": "2000", "amount": 2000 },
+          { "subjectId": "sub_invest_qqq", "currency": "USD", "formula": "11000", "amount": 11000 },
+          { "subjectId": "sub_invest_cn_index", "currency": "CNY", "formula": "72000", "amount": 72000 },
+          { "subjectId": "sub_social_housing", "currency": "CNY", "formula": "56000", "amount": 56000 },
+          { "subjectId": "sub_other_receivable", "currency": "CNY", "formula": "8000", "amount": 8000 },
+          { "subjectId": "sub_other_ccbill", "currency": "CNY", "formula": "3500", "amount": 3500 }
+        ]
+      },
+      {
+        "month": "2025-11",
+        "note": "用于环比对比（上月）",
+        "entries": [
+          { "subjectId": "sub_cash_wechat", "currency": "CNY", "formula": "10000+500-200", "amount": 0 },
+          { "subjectId": "sub_cash_alipay", "currency": "CNY", "formula": "15000", "amount": 15000 },
+          { "subjectId": "sub_cash_usd", "currency": "USD", "formula": "2300", "amount": 2300 },
+          { "subjectId": "sub_invest_qqq", "currency": "USD", "formula": "12000", "amount": 12000 },
+          { "subjectId": "sub_invest_cn_index", "currency": "CNY", "formula": "76000", "amount": 76000 },
+          { "subjectId": "sub_social_housing", "currency": "CNY", "formula": "58000", "amount": 58000 },
+          { "subjectId": "sub_other_receivable", "currency": "CNY", "formula": "6000", "amount": 6000 },
+          { "subjectId": "sub_other_ccbill", "currency": "CNY", "formula": "4000", "amount": 4000 }
+        ]
+      },
+      {
+        "month": "2025-12",
+        "note": "当前月（建议你选择 2025-12 观察环比/同比）",
+        "entries": [
+          { "subjectId": "sub_cash_wechat", "currency": "CNY", "formula": "12000", "amount": 12000 },
+          { "subjectId": "sub_cash_alipay", "currency": "CNY", "formula": "15000+3000-500", "amount": 0 },
+          { "subjectId": "sub_cash_usd", "currency": "USD", "formula": "2600", "amount": 2600 },
+          { "subjectId": "sub_invest_qqq", "currency": "USD", "formula": "13500", "amount": 13500 },
+          { "subjectId": "sub_invest_cn_index", "currency": "CNY", "formula": "80000", "amount": 80000 },
+          { "subjectId": "sub_social_housing", "currency": "CNY", "formula": "60000", "amount": 60000 },
+          { "subjectId": "sub_other_receivable", "currency": "CNY", "formula": "7000", "amount": 7000 },
+          { "subjectId": "sub_other_ccbill", "currency": "CNY", "formula": "5000", "amount": 5000 }
+        ]
+      }
+    ],
+    "settings": {
+      "usdcnhManual": 7.20001,
+      "enableCorsProxyAutoFx": false,
+      "backgroundPrompt": "测试用户：出生 1995/01/01；职业：互联网；每月可结余约 15000 CNY；风险偏好中等；目标：提升指数类资产占比。"
+    }
+  }
+}

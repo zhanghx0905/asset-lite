@@ -73,3 +73,52 @@ export function netWorthSeries(state: AppState, usdcnh: number) {
     return { month: m.month, cny: nw.totalCny, usd: nw.totalUsd, indexLikePct: nw.indexLikePct, ...nw.buckets };
   });
 }
+
+export function sumBy<T extends string>(obj: Record<T, number>, key: T, add: number) {
+  obj[key] = (obj[key] ?? 0) + add;
+}
+
+export function ymNow(): string {
+  const d = new Date();
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  return `${y}-${m}`;
+}
+
+export function prevMonthYm(ym: string): string | null {
+  const [yStr, mStr] = ym.split("-");
+  const y = Number(yStr);
+  const m = Number(mStr);
+  if (!Number.isFinite(y) || !Number.isFinite(m)) return null;
+
+  const d = new Date(y, m - 1, 1);
+  d.setMonth(d.getMonth() - 1);
+
+  const yy = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  return `${yy}-${mm}`;
+}
+
+export function prevYearSameMonth(ym: string): string | null {
+  const [y, m] = ym.split("-");
+  const yy = Number(y);
+  if (!Number.isFinite(yy) || !m) return null;
+  return `${yy - 1}-${m}`;
+}
+
+export function pctChange(cur: number, prev: number): number | null {
+  if (!Number.isFinite(cur) || !Number.isFinite(prev) || prev === 0) return null;
+  return ((cur - prev) / prev) * 100;
+}
+
+export function formatNow(ts: number): string {
+  const d = new Date(ts);
+  const pad = (n: number) => String(n).padStart(2, "0");
+  const y = d.getFullYear();
+  const m = pad(d.getMonth() + 1);
+  const day = pad(d.getDate());
+  const hh = pad(d.getHours());
+  const mm = pad(d.getMinutes());
+  const ss = pad(d.getSeconds());
+  return `${y}-${m}-${day} ${hh}:${mm}:${ss}`;
+}
