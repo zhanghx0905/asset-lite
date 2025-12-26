@@ -4,7 +4,7 @@ import { formatCny } from "./Charts";
 import { sumBy, toCny } from "../lib/calc";
 
 
-export function buildAssetPrompt({
+function buildAssetPrompt({
   state,
   record,
   fx,
@@ -101,7 +101,7 @@ export function PromptBox({
 }) {
   const [text, setText] = useState("");
 
-  const gen = async () => {
+  const buildAndMaybeCopy = async () => {
     const t = buildAssetPrompt({ state, record, fx });
     setText(t);
     try {
@@ -109,16 +109,56 @@ export function PromptBox({
     } catch {
       // ignore; user can manually copy
     }
+    return t;
+  };
+
+  const openChatGPT = async () => {
+    const t = text || (await buildAndMaybeCopy());
+    const url = `https://chatgpt.com/?q=${encodeURIComponent(t)}`; // community-known way to prefill :contentReference[oaicite:3]{index=3}
+    window.open(url, "_blank", "noopener,noreferrer");
+  };
+
+  /**
+   * 方案A：打开 Gemini 网页版（通常不支持 URL 预填充），但我们已先复制，用户进去直接 Ctrl+V。
+   * 方案B：打开 Google AI Studio（支持 ?prompt= 预填充）:contentReference[oaicite:4]{index=4}
+   */
+  const openGemini = async () => {
+    const t = text || (await buildAndMaybeCopy());
+
+    // 方案A：Gemini 网页版（预填充大概率无效，但会打开；prompt 已复制）
+    window.open("https://gemini.google.com/app", "_blank", "noopener,noreferrer");
+  };
+
+  const gen = async () => {
+    await buildAndMaybeCopy();
   };
 
   return (
     <div className="card pad" style={{ background: "rgba(255,255,255,.04)" }}>
-      <div className="row wrap" style={{ justifyContent: "space-between", alignItems: "center", gap: 8 }}>
+      <div
+        className="row wrap"
+        style={{ justifyContent: "space-between", alignItems: "center", gap: 8 }}
+      >
         <div>
-          <div className="muted" style={{ fontSize: 12, fontWeight: 900 }}>对话起点 Prompt</div>
-          <div className="muted2" style={{ fontSize: 12, marginTop: 2 }}>一键生成并复制，直接粘贴到 ChatGPT 开始聊。</div>
+          <div className="muted" style={{ fontSize: 12, fontWeight: 900 }}>
+            与大模型探讨资产组合
+          </div>
+          <div className="muted2" style={{ fontSize: 12, marginTop: 2 }}>
+            一键生成 Prompt 并复制，直接粘贴到 ChatGPT / Gemini 开始聊。
+          </div>
         </div>
-        <button className="btn primary" onClick={gen}>生成 Prompt</button>
+
+        <div className="row wrap" style={{ gap: 8, justifyContent: "flex-end" }}>
+          <button className="btn" onClick={openChatGPT} title="打开新标签页并预填充">
+            与 ChatGPT 对话
+          </button>
+          <button className="btn" onClick={openGemini} title="打开新标签页（会先复制 Prompt）">
+            与 Gemini 对话
+          </button>
+          <button className="btn primary" onClick={gen}>
+            生成 Prompt
+          </button>
+        </div>
       </div>
 
       {text && (

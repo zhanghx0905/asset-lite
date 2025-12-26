@@ -18,7 +18,7 @@ import type { AppState, AutoFxState, MonthRecord, MonthlyEntry, Currency, Subjec
 
 type TabKey = "overview" | "monthly" | "settings";
 
-export function removeSubjectFromState(prev: AppState, subjectId: string): AppState {
+function removeSubjectFromState(prev: AppState, subjectId: string): AppState {
   const nextSubjects = prev.subjects.filter((s) => s.id !== subjectId);
   const nextMonths = prev.months.map((m) => ({
     ...m,
@@ -27,7 +27,7 @@ export function removeSubjectFromState(prev: AppState, subjectId: string): AppSt
   return { ...prev, subjects: nextSubjects, months: nextMonths };
 }
 
-export function upsertSubject(prev: AppState, subject: Subject): AppState {
+function upsertSubject(prev: AppState, subject: Subject): AppState {
   const exists = prev.subjects.some((s) => s.id === subject.id);
   return {
     ...prev,
@@ -35,7 +35,7 @@ export function upsertSubject(prev: AppState, subject: Subject): AppState {
   };
 }
 
-export function ensureEntryInMonth(record: MonthRecord, subject: Subject): MonthRecord {
+function ensureEntryInMonth(record: MonthRecord, subject: Subject): MonthRecord {
   if (record.entries.some((e) => e.subjectId === subject.id)) return record;
 
   const entry: MonthlyEntry = {
@@ -49,6 +49,32 @@ export function ensureEntryInMonth(record: MonthRecord, subject: Subject): Month
     ...record,
     entries: [...record.entries, entry]
   };
+}
+
+function AssetKPI({
+  totalCny,
+  totalUsd
+}: {
+  totalCny: number;
+  totalUsd: number;
+}) {
+  return (
+    <div className="kpi">
+      <div className="card pad" style={{ background: "rgba(255,255,255,.04)" }}>
+        <div className="muted" style={{ fontSize: 12 }}>
+          Asset（CNY）
+        </div>
+        <div className="big">￥{totalCny.toFixed(2)}</div>
+      </div>
+
+      <div className="card pad" style={{ background: "rgba(255,255,255,.04)" }}>
+        <div className="muted" style={{ fontSize: 12 }}>
+          Asset（USD）
+        </div>
+        <div className="big">${totalUsd.toFixed(2)}</div>
+      </div>
+    </div>
+  );
 }
 
 export default function App() {
@@ -198,10 +224,6 @@ export default function App() {
             </button>
           </div>
 
-          <div className="row" style={{ gap: 8, alignItems: "center" }}>
-            <span className="badge">月份</span>
-            <input className="input" style={{ width: 170 }} type="month" value={ym} onChange={(e) => setYm(e.target.value)} />
-          </div>
         </div>
       </div>
 
@@ -210,9 +232,13 @@ export default function App() {
           <MarketPanel />
 
           <div className="card pad" style={{ marginTop: 12 }}>
+
             <div className="sectionTitle">
               <div className="h2">趋势洞察</div>
-
+              <div className="row" style={{ gap: 8, alignItems: "center" }}>
+                <span className="badge">月份</span>
+                <input className="input" style={{ width: 170, color: "white" }} type="month" value={ym} onChange={(e) => setYm(e.target.value)} />
+              </div>
               <div className="row" style={{ gap: 8, alignItems: "center" }}>
                 <span className="badge">指数类占比：{nw.indexLikePct.toFixed(1)}%</span>
 
@@ -220,9 +246,9 @@ export default function App() {
                   环比：
                   {momYoy.mom.ok
                     ? ` ${momYoy.mom.deltaCny >= 0 ? "+" : ""}${momYoy.mom.deltaCny.toFixed(2)} CNY` +
-                      (momYoy.mom.pctCny == null
-                        ? ""
-                        : `（${momYoy.mom.pctCny >= 0 ? "+" : ""}${momYoy.mom.pctCny.toFixed(1)}%）`)
+                    (momYoy.mom.pctCny == null
+                      ? ""
+                      : `（${momYoy.mom.pctCny >= 0 ? "+" : ""}${momYoy.mom.pctCny.toFixed(1)}%）`)
                     : " —"}
                 </span>
 
@@ -230,20 +256,21 @@ export default function App() {
                   同比：
                   {momYoy.yoy.ok
                     ? ` ${momYoy.yoy.deltaCny >= 0 ? "+" : ""}${momYoy.yoy.deltaCny.toFixed(2)} CNY` +
-                      (momYoy.yoy.pctCny == null
-                        ? ""
-                        : `（${momYoy.yoy.pctCny >= 0 ? "+" : ""}${momYoy.yoy.pctCny.toFixed(1)}%）`)
+                    (momYoy.yoy.pctCny == null
+                      ? ""
+                      : `（${momYoy.yoy.pctCny >= 0 ? "+" : ""}${momYoy.yoy.pctCny.toFixed(1)}%）`)
                     : " —"}
                 </span>
               </div>
             </div>
 
+            <AssetKPI totalCny={nw.totalCny} totalUsd={nw.totalUsd}></AssetKPI>
             <div className="split" style={{ marginTop: 12 }}>
-              <PieBreakdown title="最近一个月：资产占比（按大类，折算CNY）" items={bucketItems} />
-              <PieBreakdown title="最近一个月：资产占比（按币种，折算CNY）" items={ccyItems} />
+              <PieBreakdown title="资产占比（按大类，折算CNY）" items={bucketItems} />
+              <PieBreakdown title="资产占比（按币种，折算CNY）" items={ccyItems} />
             </div>
 
-            <div className="split">
+            <div className="split" style={{ marginTop: 12 }}>
               <div className="card pad" style={{ background: "rgba(255,255,255,.04)" }}>
                 <div className="muted" style={{ fontSize: 12, fontWeight: 800, marginBottom: 8 }}>
                   净资产趋势（CNY）
@@ -278,21 +305,7 @@ export default function App() {
             <div className="h2">月度录入</div>
           </div>
 
-          <div className="kpi">
-            <div className="card pad" style={{ background: "rgba(255,255,255,.04)" }}>
-              <div className="muted" style={{ fontSize: 12 }}>
-                净资产（CNY）
-              </div>
-              <div className="big">￥{nw.totalCny.toFixed(2)}</div>
-            </div>
-            <div className="card pad" style={{ background: "rgba(255,255,255,.04)" }}>
-              <div className="muted" style={{ fontSize: 12 }}>
-                净资产（USD）
-              </div>
-              <div className="big">${nw.totalUsd.toFixed(2)}</div>
-            </div>
-          </div>
-
+          <AssetKPI totalCny={nw.totalCny} totalUsd={nw.totalUsd}></AssetKPI>
           <div className="subtleLine" />
 
           <AddEntryRow state={state} record={record} onAdd={addEntryBySubjectId} />
