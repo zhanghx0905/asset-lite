@@ -15,8 +15,9 @@ import { PieBreakdown, NetWorthLine, BucketArea, IndexLikeLine, computeLatestBre
 import { PromptBox } from "./components/InsightsExtras";
 
 import type { AppState, AutoFxState, MonthRecord, MonthlyEntry, Currency, Subject } from "./types";
+import CompoundingDashboard from "./components/CompoundingDashboard";
 
-type TabKey = "overview" | "monthly" | "settings";
+type TabKey = "overview" | "monthly" | "settings" | "componding";
 
 function removeSubjectFromState(prev: AppState, subjectId: string): AppState {
   const nextSubjects = prev.subjects.filter((s) => s.id !== subjectId);
@@ -221,6 +222,9 @@ export default function App() {
             </button>
             <button className={`btn ${tab === "settings" ? "primary" : ""}`} onClick={() => setTab("settings")}>
               设置
+            </button>
+            <button className={`btn ${tab === "componding" ? "primary" : ""}`} onClick={() => setTab("componding")}>
+              复利模拟器
             </button>
           </div>
 
@@ -465,6 +469,12 @@ export default function App() {
           <BackupPanel state={state} setState={(s) => setState(s)} />
         </div>
       )}
+
+      {tab === "componding" && (
+        <CompoundingDashboard />
+      )
+
+      }
     </div>
   );
 }
